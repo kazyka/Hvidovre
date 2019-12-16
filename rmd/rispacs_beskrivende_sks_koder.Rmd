@@ -1,0 +1,80 @@
+---
+title: "rispacs_beskrivende_sks_koder"
+author: "Mirza Hasanbasic"
+date: "16/12/2019"
+output:
+  html_document:
+    toc: true
+    theme: united
+knit: (function(inputFile, encoding) { 
+      out_dir <- '../docs';
+      rmarkdown::render(inputFile,
+                        encoding=encoding, 
+                        output_file=file.path(dirname(inputFile), out_dir, 'rispacs_beskrivende_sks_koder.html')) })
+---
+
+
+# Program name
+
+The program name is `rispacs_beskrivende_sks_koder.R` which can be located in the scripts folder.
+
+# Project File
+
+The project file is currently `Hvidovre-new`. You should open the `R Project` icon named `Hvidovre`
+
+# Purpose
+
+The purpose of this file is to extract all of the `sks`-codes that are used by a machine.
+
+# Comments
+
+# Data Used
+
+The data used can be found in `data/processed/FBE/rispacs` where the following files are used:
+
+* `pacs_data_afgr.rds`
+* `ris_data_afgr.rds`
+* `sks_beskrivelser.rds`
+
+The raw data can be found in `Server = "RGHPRODAPP007\\RGHPRODAPP007"` for the `ris` and `pacs`.  While for the `sks_beskrivelser` this data is located in `Server = "RGHPRODAPP006\\RGHPRODAPP006"`.
+
+```
+Analyse <- dbConnect(odbc::odbc(),
+                     Driver = "SQL server",
+                     Server = "RGHPRODAPP007\\RGHPRODAPP007",
+                     Database = "Analyse",
+                     encoding = "latin1")
+
+RIS_HVIDOVRE <- tbl(Analyse, in_schema("FBE", "RIS_HVIDOVRE_AFGR")) %>%
+    collect()
+
+PACS_HVIDOVRE <- tbl(Analyse, in_schema("FBE", "PACS_HVIDOVRE_AFGR")) %>%
+    collect()
+ 
+pacs_data <- PACS_HVIDOVRE
+ris_data <- RIS_HVIDOVRE
+
+dbDisconnect(Analyse) 
+```
+
+and 
+
+```
+Analyse_sks <- dbConnect(odbc::odbc(),
+                     Driver = "SQL server",
+                     Server = "RGHPRODAPP006\\RGHPRODAPP006",
+                     Database = "DB_Report",
+                     encoding = "latin1")
+
+
+sks_data <- tbl(Analyse_sks, in_schema("DATA", "V_SKS_KODER")) %>%
+    collect()
+
+dbDisconnect(Analyse_sks) 
+```
+
+
+
+# Contents
+
+# Updates

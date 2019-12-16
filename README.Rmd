@@ -1,0 +1,122 @@
+---
+title: "Readme"
+author: "Mirza Hasanbasic"
+date: "2 sep 2019"
+output: html_document
+---
+
+# Regler
+
+# Vagtplan Data
+
+Vagtplan data for 2018 og 2019 kan findes `L:\LovbeskyttetMapper\BogA - Analyse\Mirza\Hvidovre\data\raw` med navnet `Basisskemaugeplan2018_Radiologer` og `Basisskemaugeplan2019_Radiologer`. Der er ydermere lavet en navneliste som kan findes i samme sti under navnet `NavneListe_Radiologer`. Her er der forsøgt at samle en liste over hvad en person evt. hedder i HR filen og i VP filen, hvor man i sidstnævnte har deres Navne samt initialer.
+
+Da vagtplans datasættet indeholder en tab med navnelister og initialer fra celle A1:B45, samt for hver uge fra uge1 til uge52 er de placeret i celle I3:J40, bruges disse også til at indlæse navnene og deres initialer i tilfælde. Dette gøres, da det ser ud til at man har ansat nye medarbejder i løbet af året og disse ikke ser ud til at være i tab'en med navnelisten.
+
+For `V1` vagter, så vil der være helligdage hvor vagten er skrevet `A/B(C)`, hvor det betyder at subspecialet er `V1` men vagten for `A` bliver til en `Dagvagt` mens `B` har en `Aftennattevagt` og `C` er `Bagvagten`. Ellers normalt så er `V1` vagten blot en aftennattevagt og en bagvagt hvis der er tildelt denne. 
+
+For `V2` vagter, så er deres subspeciale `V2`og vagten er også `V2`. En V2 vagt optræder også unden for et af følgende subspecialer `(CT, Orto, PET CT, UL eller MR)`, derfor hvis det er muligt, bliver subspecialter ændret til et af de følgende.
+
+For `Weekend` så er det samme fremgangsmetode som for `V1` vagter, hvor vi har `DV/AN/V2` fordeling.
+
+Der er lavet en notationsfejl i vagtplansskemaet, hvor `A` initialet skal være `ABJ`
+
+
+# HR Data
+
+I HR data kan man ikke stole på `Vagt_Start` og `Vagt_Slut`, man skal bruge kolonnerne 
+```
+"klokken0", "klokken1", "klokken2", "klokken3", "klokken4", "klokken5", "klokken6", "klokken7", "klokken8", "klokken9", "klokken10", "klokken11", "klokken12", "klokken13", "klokken14", "klokken15", "klokken16", "klokken17", "klokken18", "klokken19", "klokken20", "klokken21", "klokken22", "klokken23"
+``` 
+som indikator på hvor meget en person har arbejdet. Dog skal man stadig kigge på loenartskoden samt dato for dubletter. Det kan være at en person har haft en planlagt vagt D. 02/02/2018, men så går hen og bliver dårlig efter 2 timer på arbejde. Selvom personen har været på arbejde fra 07:00 til 09:00, så vil der under `Vagt_Start` og `Vagt_Slut` står 07:00 til 16:00, mens der i kolonnerne `klokken0-klokken23` kun vil være anført for de timer som personen har været på arbejde. 
+Der vil blive oprettet en ny række, med titlen sygdom, som så skal bruges til at se dette. 
+
+Fra dd. er dette ikke blevet implementeret (12-nov-2019), men det er planen at det skal være med i næste omgang af analyse. Lige p.t. bliver der kun kigget på `Vagt_Start` og `Vagt_Slut`
+
+
+De kolonner som har interesse er 
+```
+c("navn", "Tjenestenummer", "deltvagt", "ugedag", "shiftlabel", 
+"vagtkategori", "Vagt_Start", "Vagt_Slut", "Stilling", "aarstimetal", 
+"Loenart", "CC_Loenartstype", "LOENARTSTEKST", "klokken0", "klokken1", 
+"klokken2", "klokken3", "klokken4", "klokken5", "klokken6", "klokken7", 
+"klokken8", "klokken9", "klokken10", "klokken11", "klokken12", 
+"klokken13", "klokken14", "klokken15", "klokken16", "klokken17", 
+"klokken18", "klokken19", "klokken20", "klokken21", "klokken22", 
+"klokken23")
+```
+
+hvor følgende stillingskoder har interesse
+
+```
+c("1103 - Led ovl", "1105 - Ovl spans", "1112 - Overlæge m/v", "1113 - Overlæge u/v", "1114 - Ovl/prof", "1122 - Afdelingslæge", "1132 - 1.rsl", 
+            "1133 - Reslæge h.udd.", "1134 - Reslæge andre", "1136 - Klinisk ass", "1138 - Reslæge intro")
+```
+
+hvor den nye dataframe blivre kaldt for `hr_subset`
+
+I NavneListe filen som har stien `"L:/LovbeskyttetMapper/BogA - Analyse/Mirza/Hvidovre/data/raw/NavneListe_Radiologer.csv"` bruges følgende kode til at ændre 2 navne.
+
+```
+navneListe$HR.Navn[2] <- "Pablo Gustavo Vinicoff"
+navneListe$HR.Navn[20] <- "Laura Katrine Buskov"
+```
+
+Samtidig bliver der trimmet for whitespace
+
+```
+navneListe$HR.Navn <- trimws(navneListe$HR.Navn, which = c("both"))
+navneListe$Vagtplan.Navn <- trimws(navneListe$Vagtplan.Navn, which = c("both"))
+navneListe$Initialer <- trimws(navneListe$Initialer, which = c("both"))
+```
+
+derefter laves der en ny kolonne i `hr_subset` som skal markere om personerne eksistere i vagtplanen.
+
+```
+hr_subset$exist_vp <- 0
+hr_subset$exist_vp <- ifelse(hr_subset$navn %in% navneListe$HR.Navn, 1, 0)
+```
+
+Da vi har interesse i at kunne se, om de har haft en `dagvagt`, `aften` eller `nattevagt` er der blevet defineret tider, hvorpå en vagt skal starte i dette tidsrum for at kunne blive defineret som en af følgende vagttyper.
+
+```
+arbejds_data$check_dag <- (substr(arbejds_data$Vagt_Start, 12,16) >= "04:00" & substr(arbejds_data$Vagt_Start, 12,16) < "12:00")
+arbejds_data$check_aften <- (substr(arbejds_data$Vagt_Start, 12,16) >= "12:00" & substr(arbejds_data$Vagt_Start, 12,16) < "20:00")
+arbejds_data$check_nat <- ifelse(arbejds_data$check_aften == FALSE & arbejds_data$check_dag == FALSE, TRUE, FALSE)
+```
+
+Yderligere er der så implementeret, at hvis man har arbejde i 10+ timer op til 20 timer, så bliver vagten forlænget. Hvis man så har arbejdet i 20+ timer, så får man en `TRUE` værdi i alle kolonner.
+
+
+# Sammensætning
+
+Da vi kun har interrese i lægerne, bliver der både i HR datasættet og i VP datasættet sorteret efter disse. Yderligere bliver `c("Ferie", "Sygdom/Orlov", "Afspadsering/Fridag", "CT_dr_young", "UL_Kursister")` fjernet fra vagtplandatasættet.
+
+## VP
+
+Da vi har vagtplanen har dubletter, ønsker vi at lave en prioriteringsliste, således at de vigtige dubletter som `CT` bliver prioriteret fremfor et `møde`. Men alle `BV` bliver holdt hellige. Disse skal ikke fjernet, selvom det er en dublet.
+
+Denne prioriteringsliste ser således ud.
+
+Subspeciale_type | prioritet
+-----------------|----------
+MR_abdo|	3
+Møder|	1
+wknd_vagt|	1
+Kursus	|100
+V2	|99
+Undervisning	|5
+MR	|1
+CT_dr	|1
+Pet_ct	|2
+V1	|1
+UL	|1
+Orto	|1
+Andet	|3
+
+
+herefter bliver alle subspecialetype vagterne, som har en `V2` vagt samt en anden subspeciale vagt, får de deres `V2` vagt markeret som en dublet, hvis dette er tilfældet og fjernet `V2` vagten. Dvs., at `Vagttypen` stadig kommer til at være `V2`, men subspeciale vagten nu bliver `MR, Orto,...` vist som subspeciale i stedet for.
+
+## HR
+
+Der røres ikke i HR datasættet.

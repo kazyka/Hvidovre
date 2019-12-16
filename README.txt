@@ -1,0 +1,26 @@
+name_of_project
+|--data
+    |--raw
+        |--WhateverData.xlsx
+        |--2017report.csv
+        |--2016report.pdf
+    |--processed
+        |--WhateverData.rds
+        |--2016-2017report.rds
+|--output_data
+    |--summary2016_2017.csv
+|--rmd
+    |--01-analysis.Rmd
+    |--01-deeper.Rmd
+|--docs
+    |--01-analysis.html
+    |--01-analysis.pdf
+    |--02-deeper.html
+    |--02-deeper.pdf
+|--reports
+|--figures
+|--scripts
+    |--exploratory_analysis.R
+    |--pdf_scraper.R
+|--name_of_project.Rproj
+|--run_all.R

@@ -1,0 +1,1116 @@
+---
+title: "rispacs_gennemlyser"
+author: "Mirza Hasanbasic"
+date: "12/12/2019"
+output: html_document
+---
+
+```{r}
+
+library(dplyr)
+library(dbplyr)
+library(odbc)
+library(stringr)
+library(tidyverse)
+library(gridExtra)
+library(grid)
+library(hrbrthemes)
+library(here)
+library(vroom)
+```
+
+```{r}
+machines_to_select_list <- c("CT", "MR", "gennemlyser", "kaebeskanner", "RTG", 
+                             "XRU", "UL", "PET")
+
+kk <- 3
+```
+
+
+```{r}
+data_raw_loc <- paste0(here(), "/data/raw/")
+```
+
+
+```{r}
+
+# Loader helligdage
+load(file = paste0(here(), "/data/raw/FBE/rispacs/helligdag18.rda"))
+
+helligdag <- c(helligdag18, as.Date("2019-01-01"), as.Date("2019-04-14"),
+               as.Date("2019-04-18"), as.Date("2019-04-19"), as.Date("2019-04-21"),
+               as.Date("2019-04-2"), as.Date("2019-05-17"), as.Date("2019-05-30"),
+               as.Date("2019-06-09"), as.Date("2019-06-10"), as.Date("2019-12-25"),
+               as.Date("2019-12-26"))
+
+# Loader liste af skannertyper
+skannertype <- read.csv2(
+    paste0(data_raw_loc , "FBE/rispacs/skannertype.csv"),
+    header = TRUE,
+    sep = ";",
+    stringsAsFactors = FALSE,
+    colClasses = "character"
+)
+
+sks_navne_oversigt <- read.csv2(
+    paste0(data_raw_loc , "FBE/rispacs/sks_navne.csv"),
+    header = TRUE,
+    sep = ";",
+    stringsAsFactors = FALSE,
+    colClasses = "character"
+)
+
+
+# Definere funktioner
+roundUpNice <- function(x, nice=c(1,2,4,5,6,8,10)) {
+    if(length(x) != 1) stop("'x' must be of length 1")
+    10^floor(log10(x)) * nice[[which(x <= 10^floor(log10(x)) * nice)[[1]]]]
+}
+
+dog_aabningstid <- function(df, x = NULL){
+    suppressWarnings(
+        df %>%
+            dplyr::filter(!.data$date %in% x) %>%
+            dplyr::filter(!.data$weekday %in% c(7, 1)) %>%
+            dplyr::filter((dplyr::between(.data$hour_min, as.numeric(hms::as.hms("08:00:00")), as.numeric(hms::as.hms("14:59:59")))
+                           & .data$weekday %in% c(2:5))  |
+                              (.data$weekday %in% c(6)
+                               & dplyr::between(.data$hour_min, as.numeric(hms::as.hms("08:00:00")), as.numeric(hms::as.hms("14:30:00")))))
+    )
+}
+
+source(paste0(here(), "/data/raw/FBE/rispacs/R/dog_combine_accession_numbers.r"))
+source(paste0(here(), "/data/raw/FBE/rispacs/R/dog_spread_SKS.r"))
+source(paste0(here(), "/data/raw/FBE/rispacs/R/dog_date_columns.r"))
+source(paste0(here(), "/data/raw/FBE/rispacs/R/dog_date_from_text.r"))
+source(paste0(here(), "/data/raw/FBE/rispacs/R/dog_double_count.r"))
+
+```
+
+
+```{r}
+
+save_processed_loc <-  paste0(here(), "/data/processed/FBE/rispacs/")
+save_data_loc <-  paste0(here(), "/output_data/")
+save_fig_loc <-  paste0(here(), "/figures/")
+
+
+```
+
+```{r}
+
+farver <-
+        c(
+            rgb(148, 182, 210, m = 255),
+            rgb(221, 128, 71, m = 255),
+            rgb(165, 171, 129, m = 255),
+            rgb(216, 178, 92, m = 255),
+            rgb(123, 167, 157, m = 255),
+            rgb(150, 140, 140, m = 255)
+        )
+
+
+machines_to_select <- machines_to_select_list[kk]
+years_to_select <- c("2018", "2019")
+
+print(years_to_select)
+print(machines_to_select)
+
+affix_save_name <- paste0(c(years_to_select, machines_to_select), collapse = "_")
+
+
+if (machines_to_select == "CT") {
+    machines_selected <- c("CT1", "CT2", "CT3", "CT4")
+    time_before_merge <- 30
+} else if (machines_to_select == "PET") {
+    machines_selected <- c("CTK1")
+    time_before_merge <- 90
+} else if (machines_to_select == "MR") {
+    machines_selected <- c("MR1", "MR2", "MR3", "MR4")
+    time_before_merge <- 90
+} else if (machines_to_select == "gennemlyser") {
+    machines_selected <- c("Gennemlyser")
+    time_before_merge <- 90
+} else if (machines_to_select == "kaebeskanner") {
+    machines_selected <- c("Kæbeskanner")
+    time_before_merge <- 60
+} else if (machines_to_select == "RTG") {
+    machines_selected <-
+        c("XR1", "XR2", "XT2", "XT3", "XT4", "XR4", "XT4", "XT5")
+    time_before_merge <- 90
+} else if (machines_to_select == "XRU") {
+    machines_selected <- c("XRUdefoto")
+    time_before_merge <- 90
+} else if (machines_to_select == "UL") {
+    machines_selected <- c("UL1", "UL2", "UL3", "UL4", "UL5")
+    time_before_merge <- 60
+} else {
+    print("CHECK YOUR machines to select")
+}
+```
+
+
+```{r}
+
+read_file_loc <- paste0(save_processed_loc, machines_to_select, "/aktivitet.rds")   
+ct_out <- readRDS(read_file_loc)
+print(paste0("File read: ", read_file_loc))
+```
+
+
+```{r}
+out <- ct_out[ct_out$year %in% years_to_select, ]
+
+lev_pri <- unique(out$Procedure_priority)
+to_match <- c("Haste", "Fremskyndet", "Kræftpakke", "Rutine", "-1", "DO NOT REMOVE")
+lev_pri <- lev_pri[order(match(lev_pri, to_match))]
+
+day_lev <- c("0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", 
+             "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24",
+             "25", "26", "27", "28", "29", "30", "31")
+
+
+alle_r_en_r <- out %>% 
+    mutate(Source= fct_relevel(Source, unique(out$Source)[order(match(unique(out$Source), machines_selected))]),
+           Procedure_priority = fct_relevel(Procedure_priority, lev_pri)) 
+
+
+alle_r_en_r_aab <- alle_r_en_r %>% 
+    dog_aabningstid()
+
+n_hverdage <- alle_r_en_r_aab %>% 
+    distinct(date) %>% 
+    nrow()
+
+n_aabningsdage <- alle_r_en_r_aab %>%
+    count(date, Source) %>%
+    count(Source) %>% 
+    rename(Antal_aabningsdage= n) %>% 
+    mutate(Antal_dage_lukket =  n_hverdage - Antal_aabningsdage) %>% 
+    filter(Source != "Ingen ID") 
+
+antal_scan <- alle_r_en_r_aab %>% 
+    group_by(Source) %>%
+    summarise(Antal_scanninger=n()) 
+
+aab_acc_num <- alle_r_en_r_aab$Accession_number2
+
+lukket_df <- alle_r_en_r %>% 
+    filter(!Accession_number2 %in% aab_acc_num)
+
+
+hverdage <- alle_r_en_r %>% 
+    filter(!weekday %in% c(1,7)) %>% 
+    filter(!date %in% helligdag)
+
+data_nummer <- alle_r_en_r %>% 
+    count(Source)
+
+alle_r_en_r$Source_na <- alle_r_en_r$Source
+
+alle_r_en_r$Procedure_priority_na <- alle_r_en_r$Procedure_priority 
+```
+
+# Tabel oversigt 
+
+Oversigt af antal scanninger fordelt på scanner ID og prioritet i åbningstiden.
+Dette er for 2018 og 2019
+
+```{r}
+d <- inner_join(n_aabningsdage, antal_scan, by="Source") %>% 
+    mutate(scanninger_pr_aabningsdag = Antal_scanninger/Antal_aabningsdage) %>% 
+    filter(Source!="Ingen ID") 
+
+colnames(d) <- c("Source", "Antal Åbningsdage", "Antal lukke dage", 
+                 "Antal_scanninger", "Scanninger/åbningsdag")
+
+d
+
+save_file_name <- paste0(save_fig_loc, machines_to_select, "/", affix_save_name, "_tabel_oversigt_for_source.png")
+ggsave(save_file_name, plot = grid.table(d), width = 30, height = 20, units = "cm")
+
+```
+
+
+# Plots
+
+## Plot size settings
+
+```{r}
+base_size_ <- 14
+plot_title_size_ <- 20
+subtitle_size_ <- 14
+strip_text_size_ <- 12
+caption_size_ <- 12
+axis_title_size_ <- 14
+```
+
+
+## Antal scanninger fordelt på prioritet og scanner
+
+
+```{r}
+title_text <- paste0("Antal scanninger fordelt på prioritet og scanner; alle dage i ", paste0(c(years_to_select), collapse = "_"))
+
+p <- alle_r_en_r %>% 
+    group_by(Procedure_priority, Source) %>% 
+    summarise(n=n()) %>% 
+    ungroup() %>% 
+    filter(Procedure_priority!="-1") %>% 
+    group_by(Source) %>% 
+    mutate(total= sum(n)) %>% 
+    ungroup() %>% 
+    ggplot(aes(x = forcats::fct_rev(Source), y = n, fill = Procedure_priority)) +
+    geom_bar(stat = "identity", position = "stack", color="black") +
+    geom_text(data=data_nummer, aes(x= Source, y=n, label=n, fill=NULL), colour = "black") +
+    coord_flip() +
+    labs(title= title_text,
+         x="Scanner",
+         y="Antal",
+         fill="") +
+    scale_y_continuous(breaks =seq(0, 190000, 10000) ) + 
+    scale_fill_manual(values = farver) +
+    theme_ipsum(base_size = base_size_, plot_title_size = plot_title_size_, 
+                subtitle_size = subtitle_size_, strip_text_size = strip_text_size_, 
+                caption_size = caption_size_, axis_title_size = axis_title_size_)
+
+p
+
+save_file_name <- paste0(save_fig_loc, machines_to_select, "/", affix_save_name, "_alle_dage.png")
+ggsave(save_file_name, plot = p, width = 30, height = 20, units = "cm")
+```
+
+
+## Kun åbningstid
+
+```{r}
+
+title_text <- paste0("Antal scanninger fordelt på prioritet og scanner i ", paste0(c(years_to_select), collapse = "_"))
+
+data_nummer_aab <- alle_r_en_r_aab %>% 
+    count(Source)
+
+p <- alle_r_en_r_aab %>% 
+    group_by(Procedure_priority, Source) %>% 
+    summarise(antal=n()) %>% 
+    ungroup() %>% 
+    filter(Procedure_priority!="-1") %>% 
+    ggplot(aes(x=forcats::fct_rev(Source), y = antal, fill = Procedure_priority)) +
+    geom_bar(stat = "identity", position = "stack", color="black") +
+    geom_text(data=data_nummer_aab, aes(x= Source, y=n, label=n, fill=NULL), color="black") +
+    coord_flip() +
+    labs(title=title_text,
+         subtitle="Åbningstiden i hverdage", 
+         x="Scanner",
+         y="Antal",
+         fill="") + scale_fill_manual(values = farver) +
+    scale_y_continuous(breaks =seq(0, roundUpNice(max(data_nummer_aab$n)), roundUpNice(max(data_nummer_aab$n))/10)) + 
+    theme_ipsum(base_size = base_size_, plot_title_size = plot_title_size_, 
+                subtitle_size = subtitle_size_, strip_text_size = strip_text_size_, 
+                caption_size = caption_size_, axis_title_size = axis_title_size_)
+
+p
+
+
+save_file_name <- paste0(save_fig_loc, machines_to_select, "/", affix_save_name, "_aabningstid_hverdage.png")
+ggsave(save_file_name, plot = p, width = 30, height = 20, units = "cm")
+```
+
+
+## Nu for lukkedage.
+
+Dvs at diffrence mellem alle_r_en_r og alle_r_en_r_aab
+
+```{r}
+title_text <- paste0("Antal scanninger fordelt på prioritet og scanner i lukkettid i ", paste0(c(years_to_select), collapse = "_"))
+
+
+data_nummer_luk <- lukket_df %>% 
+    count(Source)
+
+p <- lukket_df %>% 
+    group_by(Procedure_priority, Source) %>% 
+    summarise(antal=n()) %>% 
+    ungroup() %>% 
+    filter(Procedure_priority!="-1" | is.na(Procedure_priority) | is.na(Source)) %>% 
+    ggplot(aes(x=forcats::fct_rev(Source), y = antal, fill = Procedure_priority)) +
+    geom_bar(stat = "identity", position = "stack", color="black") +
+    geom_text(data=data_nummer_luk, aes(x= Source, y=n, label=n, fill=NULL), colour = "black") +
+    coord_flip() +
+    labs(title=title_text,
+         subtitle = "Lukketid er alt som ikke er i åbningstiden",
+         x="Scanner",
+         y="Antal",
+         fill="") + scale_fill_manual(values = farver)+
+    scale_y_continuous(breaks =seq(0, roundUpNice(max(data_nummer_luk$n)), roundUpNice(max(data_nummer_luk$n))/10))+
+    theme_ipsum(base_size = base_size_, plot_title_size = plot_title_size_, 
+                subtitle_size = subtitle_size_, strip_text_size = strip_text_size_, 
+                caption_size = caption_size_, axis_title_size = axis_title_size_)
+
+p
+
+save_file_name <- paste0(save_fig_loc, machines_to_select, "/", affix_save_name, "_lukketid_prio.png")
+ggsave(save_file_name, plot = p, width = 30, height = 20, units = "cm")
+```
+
+
+## Scanninger i antal dage
+
+```{r}
+title_text <- paste0("Antal scanninger i ", paste0(c(years_to_select), collapse = "_"))
+
+data_spread_dage_sk <- alle_r_en_r_aab %>%
+    count(date, Source) %>% 
+    spread(Source, n) %>%
+    replace(is.na(.), 0) %>%
+    gather(intersect(unique(alle_r_en_r_aab$Source), machines_selected), key="Source", value="n") %>%
+    count(Source, n)
+
+p <- alle_r_en_r_aab %>%
+    count(date, Source) %>% 
+    spread(Source, n) %>%
+    # select(- `Ingen ID`) %>%
+    replace(is.na(.), 0) %>%
+    gather(intersect(unique(alle_r_en_r_aab$Source), machines_selected), key="Source", value="n") %>%
+    count(Source, n) %>% 
+    ggplot(aes(x=n, y=nn)) +
+    geom_bar(stat="identity", fill=farver[2], colour="black") +
+    facet_wrap(~Source) +
+    labs( title=title_text,
+          subtitle = "Scanninger i antal dage",
+          x = "Antal scanninger",
+          y= "Antal dage") +
+    #scale_x_continuous(breaks = seq(0, 24, 2), limits = c(0, 24)) +
+    scale_y_continuous(breaks = seq(0, roundUpNice(max(data_spread_dage_sk$nn)), roundUpNice(max(data_spread_dage_sk$nn))/10)) +
+    theme_ipsum(base_size = base_size_, plot_title_size = plot_title_size_, 
+                subtitle_size = subtitle_size_, strip_text_size = strip_text_size_, 
+                caption_size = caption_size_, axis_title_size = axis_title_size_) + 
+    scale_fill_manual(values = farver)
+
+p
+
+save_file_name <- paste0(save_fig_loc, machines_to_select, "/", affix_save_name, "_lukketid_bar.png")
+ggsave(save_file_name, plot = p, width = 30, height = 20, units = "cm")
+```
+
+
+## Laver det samme some ovenover, bare samlet for alle
+
+```{r}
+
+
+title_text <- paste0("Alle skanner i ", paste0(c(years_to_select), collapse = "_"))
+
+data_spread_dage_sk <- alle_r_en_r_aab %>%
+    count(date, Source) %>%
+    spread(Source, n) %>%
+    #select(- `Ingen ID`) %>%
+    replace(is.na(.), 0) %>%
+    gather(intersect(unique(alle_r_en_r_aab$Source), machines_selected), key="Source", value="n") %>%
+    count(n)
+
+p <- alle_r_en_r_aab %>%
+    count(date, Source) %>%
+    spread(Source, n) %>%
+    #select(- `Ingen ID`) %>%
+    replace(is.na(.), 0) %>%
+    gather(intersect(unique(alle_r_en_r_aab$Source), machines_selected), key="Source", value="n") %>%
+    count(n)  %>%
+    ggplot(aes(x=n, y=nn)) +
+    geom_bar(stat="identity", fill= farver[2], colour = "black")  +
+    geom_text(aes(label=nn), vjust = -.5, colour = "black") +
+    scale_y_continuous(breaks = seq(0, roundUpNice(max(data_spread_dage_sk$nn)), roundUpNice(max(data_spread_dage_sk$nn))/10)) +
+    #scale_x_continuous(breaks = seq(0, 24, 2)) +
+    labs(y = "Antal dage",
+         x="Antal Scanninger",
+         title=title_text) + theme_ipsum(base_size = base_size_, plot_title_size = plot_title_size_, 
+                subtitle_size = subtitle_size_, strip_text_size = strip_text_size_, 
+                caption_size = caption_size_, axis_title_size = axis_title_size_) + 
+    scale_fill_manual(values = farver)
+
+p
+
+save_file_name <- paste0(save_fig_loc, machines_to_select, "/", affix_save_name, "_skanninger_over_dage_samlet.png")
+ggsave(save_file_name, plot = p, width = 30, height = 20, units = "cm")
+
+```
+
+
+## heatmaps
+
+```{r}
+
+
+heatmap_raw <-  alle_r_en_r %>% 
+    select(weekday2, date, hour, Source_na, Procedure_priority_na)
+
+
+n_ugedage_hverdage <- alle_r_en_r %>%
+    filter(!(weekday2 %in% c("lø", "sø"))) %>%
+    filter(!(date %in% helligdag)) %>%
+    filter(!is.na(date)) %>%
+    distinct(date, weekday2) %>%
+    group_by(weekday2) %>%
+    summarise(antal_ugedage =n()) %>%
+    ungroup()
+
+tmp_gather <- alle_r_en_r %>%
+    filter(!is.na(weekday2)) %>%
+    filter(!weekday2 %in% c("lø", "sø") & !date %in% helligdag) %>%
+    group_by(hour, weekday2) %>%
+    summarise(n=n()) %>%
+    ungroup() %>%
+    spread(hour, n)  %>%
+    replace(is.na(.), 0)  
+
+
+ heatmaps <- alle_r_en_r %>%
+    filter(!is.na(weekday2)) %>%
+    filter(!weekday2 %in% c("lø", "sø") & !date %in% helligdag) %>%
+    group_by(hour, weekday2) %>%
+    summarise(n=n()) %>%
+    ungroup() %>%
+    spread(hour, n)  %>%
+    replace(is.na(.), 0) %>%
+    gather(2:ncol(tmp_gather), key="hour", value="antal") %>%
+    inner_join(n_ugedage_hverdage, by="weekday2") %>%
+    mutate(hour=as.integer(hour), antal_gns= antal/antal_ugedage)
+
+
+
+
+title_text <- paste0("Gennemsnitlig antal scanninger i ", paste0(c(years_to_select), collapse = "_"))
+
+
+
+
+p <- heatmaps %>%
+    ggplot(aes(hour, weekday2, fill = antal_gns)) +
+    geom_tile(color = "white") +
+    scale_fill_viridis_c( limits=c(0, roundUpNice(max(heatmaps$antal_gns))),
+                          breaks= seq(0, roundUpNice(max(heatmaps$antal_gns)), roundUpNice(max(heatmaps$antal_gns))/10),
+                          labels= format(seq(0, roundUpNice(max(heatmaps$antal_gns)),
+                                             roundUpNice(max(heatmaps$antal_gns))/10)), option="A") +
+    coord_equal() +
+    scale_x_continuous(breaks = seq(0,23,1)) +
+    labs(title= title_text,
+         x="",
+         y="",
+         fill="") + 
+    theme_ipsum(base_size = base_size_, plot_title_size = plot_title_size_, 
+                subtitle_size = subtitle_size_, strip_text_size = strip_text_size_, 
+                caption_size = caption_size_, axis_title_size = axis_title_size_)
+p
+
+
+
+save_file_name <- paste0(save_fig_loc, machines_to_select, "/", affix_save_name, "_skanninger_heatmap.png")
+ggsave(save_file_name, plot = p, width = 30, height = 20, units = "cm")
+
+
+```
+
+
+#
+
+```{r}
+title_text <- paste0("Gns. antal haste besøg fordelt på tid på dagen og ugedag i ", paste0(c(years_to_select), collapse = "_"))
+
+
+count_haste_ford <- alle_r_en_r %>% 
+    filter(!weekday2 %in% c("lø", "sø") & !date %in% helligdag18) %>% 
+    count(weekday2, hour, Procedure_priority) %>% 
+    inner_join(n_ugedage_hverdage, by="weekday2") %>% 
+    mutate(gns=n/antal_ugedage) %>% 
+    filter(Procedure_priority=="Haste")
+
+p <- alle_r_en_r %>% 
+    filter(!weekday2 %in% c("lø", "sø") & !date %in% helligdag18) %>% 
+    count(weekday2, hour, Procedure_priority) %>% 
+    inner_join(n_ugedage_hverdage, by="weekday2") %>% 
+    mutate(gns=n/antal_ugedage) %>% 
+    filter(Procedure_priority=="Haste") %>% 
+    ggplot() +
+    geom_line(aes(x=hour, y=gns, color=weekday2), size = 1.2) + 
+    scale_fill_manual(values = farver) +
+    scale_y_continuous(breaks = seq(0, roundUpNice(max(count_haste_ford$gns)), 0.5)) +
+    scale_x_continuous(breaks=seq(0,23, 1)) +
+    labs(color="", 
+         title=title_text) + theme_ipsum(base_size = base_size_, plot_title_size = plot_title_size_, 
+                subtitle_size = subtitle_size_, strip_text_size = strip_text_size_, 
+                caption_size = caption_size_, axis_title_size = axis_title_size_) 
+
+p
+
+save_file_name <- paste0(save_fig_loc, machines_to_select, "/", affix_save_name, "_snit_haste_besoeg.png")
+ggsave(save_file_name, plot = p, width = 30, height = 20, units = "cm")
+```
+
+## overblik over haste scanninger fordelt på tid på dagen
+
+
+
+```{r}
+title_text <- paste0("Gennemsnit af haste scanninger i hverdage med 95% konfidensinterval i ", paste0(c(years_to_select), collapse = "_"))
+
+
+count_haste_ford <- alle_r_en_r %>% 
+    filter(!is.na(hour)) %>% # impute hour 
+    filter(!weekday2 %in% c("lø¸", "sø¸") & !date %in% helligdag18) %>% 
+    filter(Procedure_priority=="Haste") %>% 
+    count(hour, date) %>% 
+    spread(hour, n) %>% 
+    replace(is.na(.), 0)
+
+count_haste_ford <- alle_r_en_r %>% 
+    filter(!is.na(hour)) %>% # impute hour 
+    filter(!weekday2 %in% c("lø¸", "sø¸") & !date %in% helligdag18) %>% 
+    filter(Procedure_priority=="Haste") %>% 
+    count(hour, date) %>% 
+    spread(hour, n) %>% 
+    replace(is.na(.), 0) %>% 
+    gather(2:ncol(count_haste_ford), key="hour", value="antal") %>% 
+    group_by(hour) %>% 
+    summarise(n=n(),
+              gns=mean(antal),
+              u= gns + 1.96*sd(antal)/ sqrt(n),
+              l= gns -1.96*sd(antal)/sqrt(n),
+              u_q = quantile(antal, probs = .75)) %>% 
+    mutate_if(is.character, as.numeric)
+
+p <- count_haste_ford %>%
+    ggplot() +
+    geom_line(aes(x = hour, y=gns)) +
+    geom_line(aes(x=hour, y=u, color="red")) +
+    geom_line(aes(x=hour, y=l, color="red")) +
+    labs(title=title_text) +
+    #scale_y_continuous(breaks = seq(0, roundUpNice(max(count_haste_ford$gns)), 0.5)) +
+    # scale_x_continuous(breaks = seq(0, 23, 1))  + 
+    theme_ipsum(base_size = base_size_, plot_title_size = plot_title_size_, 
+                subtitle_size = subtitle_size_, strip_text_size = strip_text_size_, 
+                caption_size = caption_size_, axis_title_size = axis_title_size_)  +
+    theme(legend.position="none")   
+
+p
+
+save_file_name <- paste0(save_fig_loc, machines_to_select, "/", affix_save_name, "_snit_haste_95_konf_int.png")
+ggsave(save_file_name, plot = p, width = 30, height = 20, units = "cm")
+```
+
+
+
+
+## Fordeling af prioritet over tid
+
+```{r}
+title_text <- paste0("Antal scanninger fordelt på prioritet i ", paste0(c(years_to_select), collapse = "_"))
+
+
+p <- alle_r_en_r_aab %>% 
+    count(Procedure_priority, sort=TRUE) %>% 
+    filter(Procedure_priority!="-1" | is.na(Procedure_priority)) %>% 
+    mutate(sum=sum(n), andel=n/sum*100, year=c(paste0(c(years_to_select), collapse = "_"))) %>% 
+    ggplot(aes(x=as_factor(year), y=andel, fill=fct_relevel(Procedure_priority, levels=lev_pri))) +
+    geom_bar(stat = "identity", width = .3, color="black")  +
+    labs(y=NULL, x=NULL, 
+         title = title_text,
+         subtitle = "Ser kun på åbningstiden") +
+    guides(fill=guide_legend(title="")) +
+    theme(plot.caption = element_text(hjust = 0)) +
+    geom_text(aes(label = paste0(round(andel, digits = 2), "%")),
+              position = position_stack(vjust = 0.5), show.legend = FALSE, color="black") + 
+    theme_ipsum(base_size = base_size_, plot_title_size = plot_title_size_, 
+                subtitle_size = subtitle_size_, strip_text_size = strip_text_size_, 
+                caption_size = caption_size_, axis_title_size = axis_title_size_) + 
+    scale_fill_manual(values = farver)
+
+p
+
+save_file_name <- paste0(save_fig_loc, machines_to_select, "/", affix_save_name, "_antal_skanninger_paa_prioritet.png")
+ggsave(save_file_name, plot = p, width = 30, height = 20, units = "cm")
+```
+
+# Scanninger fordelt på prioritet på dagen
+
+```{r}
+count_fordeling <- hverdage %>%
+    filter(Procedure_priority!="-1" | is.na(Procedure_priority) ) %>%
+    count(hour, Procedure_priority, sort=TRUE) %>%
+    mutate(hour = factor(as.character(hour), levels =day_lev )) %>%
+    group_by(Procedure_priority) %>%
+    top_n(1, n) 
+
+title_text <- paste0("Antal scanninger fordelt på prioritet og tid på dagen i ", paste0(c(years_to_select), collapse = "_"))
+
+
+p <- hverdage %>%
+    filter(Procedure_priority!="-1" | is.na(Procedure_priority) ) %>%
+    count(hour, Procedure_priority, sort=TRUE) %>%
+    mutate(hour = factor(as.character(hour), levels =day_lev )) %>% 
+    ggplot() +
+    geom_bar(aes(x= hour, y=n, fill=Procedure_priority), stat="identity",
+             position="stack", color="black") +
+    labs(title=title_text,
+         subtitle = "Hverdage",
+         fill= "",
+         y="Antal", x="Tid på dagen") +
+    theme(plot.caption = element_text(hjust = 0)) +
+    scale_y_continuous(breaks = seq(0, roundUpNice(sum(count_fordeling$n)), roundUpNice(max(count_fordeling$n))/10)) +
+    scale_fill_manual(values = farver) + 
+    theme_ipsum(base_size = base_size_, plot_title_size = plot_title_size_, 
+                subtitle_size = subtitle_size_, strip_text_size = strip_text_size_, 
+                caption_size = caption_size_, axis_title_size = axis_title_size_)
+
+p
+
+save_file_name <- paste0(save_fig_loc, machines_to_select, "/", affix_save_name, "_antal_skanninger_fordelt_prio_tid.png")
+ggsave(save_file_name, plot = p, width = 30, height = 20, units = "cm")
+```
+
+
+
+## Scanninger i åbningstiden
+
+
+```{r}
+oversig_skaning_aabning <- alle_r_en_r_aab %>%
+    filter(Procedure_priority!="-1") %>%
+    count(hour, Procedure_priority) %>% 
+    filter(Procedure_priority!= "Prioritet mangler") %>% 
+    mutate(gns=n/n_hverdage)
+
+title_text <- paste0("Antal skanninger i Åbningstiden i ", paste0(c(years_to_select), collapse = "_"))
+
+
+p <- oversig_skaning_aabning %>%
+    ggplot() +
+    geom_line(aes(x=hour, y=n, color=Procedure_priority), size=1.2) +
+    facet_wrap(~Procedure_priority) +
+    theme(legend.position = "none") +
+    labs(y="Skanninger", x="Time", title=title_text) +
+    #scale_x_continuous(breaks = seq(8, 15, 1)) +
+    scale_y_continuous(limits = c(0, roundUpNice(max(oversig_skaning_aabning$n))), 
+                       breaks = seq(0, roundUpNice(max(oversig_skaning_aabning$n)) , roundUpNice(max(oversig_skaning_aabning$n))/10)) +
+    scale_fill_manual(values = farver) +
+    theme_ipsum(base_size = base_size_, plot_title_size = plot_title_size_, 
+                subtitle_size = subtitle_size_, strip_text_size = strip_text_size_, 
+                caption_size = caption_size_, axis_title_size = axis_title_size_)
+
+p
+
+save_file_name <- paste0(save_fig_loc, machines_to_select, "/", affix_save_name, "_antal_skanninger_i_aabningstid.png")
+ggsave(save_file_name, plot = p, width = 30, height = 20, units = "cm")
+```
+
+
+## Fordelt på hver scanner
+
+```{r}
+# Fordelt på scanner 
+# FIX
+fordelt_paa_scanner_og_tid <- hverdage %>% 
+    filter(Procedure_priority!="-1") %>%
+    group_by(Source) %>% 
+    nest() %>% 
+    arrange(Source) %>% 
+    mutate(counts = map(data, ~ .x %>% count(hour, Procedure_priority, sort=TRUE))  ) %>% 
+    mutate(counts = map(counts, ~ .x %>% mutate(hour = factor(as.character(hour), levels = day_lev ))  )) #%>%
+    #mutate(highest_value)
+
+
+subtitle_text <- paste0("Antal skanninger fordelt på prioritet og tid på dagen i ", paste0(c(years_to_select), collapse = "_"))
+fordelt_paa_scanner_og_tid <- hverdage %>% 
+    filter(Procedure_priority!="-1") %>%
+    group_by(Source) %>% 
+    nest() %>% 
+    arrange(Source) %>% 
+    mutate(counts = map(data, ~ .x %>% count(hour, Procedure_priority, sort=TRUE))  ) %>% 
+    mutate(counts = map(counts, ~ .x %>% mutate(hour = factor(as.character(hour), levels = day_lev ))  )) %>% 
+    mutate(plot = map2(Source, counts, ~.y %>% 
+                           ggplot() + 
+                           geom_bar(aes(x= hour, y=n, fill=Procedure_priority), 
+                                    stat="identity", position="stack",  color="black") +
+                           labs(title= paste("For skanner:", .x, "- hverdage"),
+                                subtitle = subtitle_text, 
+                                y="Antal", 
+                                x="Tid på dagen",
+                                fill="") + 
+                           #scale_y_continuous(breaks = seq(0, 1000, 100), limits = c(0, 1000)) +
+                           #scale_color_manual(values = farver) +
+                           theme_ipsum(base_size = base_size_, plot_title_size = plot_title_size_, 
+                subtitle_size = subtitle_size_, strip_text_size = strip_text_size_, 
+                caption_size = caption_size_, axis_title_size = axis_title_size_) +
+                           theme(plot.caption = element_text(hjust = 0)))) %>% 
+    select(plot) 
+
+max_skan <- length(unique(fordelt_paa_scanner_og_tid$Source))
+
+for (i in 1:max_skan) {
+    print(fordelt_paa_scanner_og_tid$plot[[i]])
+}
+
+for (i in 1:max_skan){
+    save_file_name <- paste0(save_fig_loc, machines_to_select, "/", affix_save_name, "_antal_skanninger_i_aabningstid_", i, "_plot.png")
+    ggsave(save_file_name, plot = fordelt_paa_scanner_og_tid$plot[[i]], width = 30, height = 20, units = "cm")
+}
+```
+
+## Samlet oversigt
+
+```{r}
+# Samlet oversigt
+#FIX
+oversigt_fordeling <- hverdage %>%
+    filter(Procedure_priority!="-1") %>%
+    count(hour, Procedure_priority, Source) %>% 
+    filter(Source!= "Ingen ID") 
+
+
+title_text <- paste0("Antal scanninger i hverdage i ", paste0(c(years_to_select), collapse = "_"))
+
+p <- hverdage %>%
+    filter(Procedure_priority!="-1") %>%
+    count(hour, Procedure_priority, Source) %>% 
+    filter(Source!= "Ingen ID") %>% 
+    ggplot() +
+    geom_bar(aes(x=hour, y=n, fill=Procedure_priority), stat="identity", colour="black") +
+    facet_wrap(~Source) +
+    theme(legend.position = "right") +
+    labs(y="Antal", x="Tid på dagen", title=title_text, fill="") +
+    scale_x_continuous(breaks = seq(0, 23, 2))  + scale_fill_manual(values = farver) +
+    scale_y_continuous( breaks = seq(0, roundUpNice(max(oversigt_fordeling$n)) , roundUpNice(max(oversigt_fordeling$n))/10)) +
+    theme_ipsum(base_size = base_size_, plot_title_size = plot_title_size_, 
+                subtitle_size = subtitle_size_, strip_text_size = strip_text_size_, 
+                caption_size = caption_size_, axis_title_size = axis_title_size_)
+p
+
+
+save_file_name <- paste0(save_fig_loc, machines_to_select, "/", affix_save_name, "_antal_skanninger_i_hverdage.png")
+ggsave(save_file_name, plot = p, width = 30, height = 20, units = "cm")
+```
+
+
+# fordelt på prioritet og tid på dag / scanner
+
+```{r}
+
+## Fordel på prioritet og tid på dag / skanner
+# Fix
+ts_version <- alle_r_en_r_aab %>% 
+    filter(!Procedure_priority %in% c("-1", "Prioritet mangler")) %>%
+    group_by(Source) %>% 
+    nest() %>% 
+    arrange(Source) %>% 
+    mutate(counts = map(data, ~ .x %>% count(hour, Procedure_priority, sort=TRUE))  ) %>% 
+    mutate(plot = map2(Source, counts, ~.y %>% 
+                           ggplot() + 
+                           geom_line(aes(x= hour, y=n, color= Procedure_priority), size=1.2) +
+                           facet_wrap(~Procedure_priority) +
+                           labs(title= paste("For scanner:", .x, "- hverdage"),
+                                subtitle = "Antal scanninger fordelt på prioritet og tid på dagen", 
+                                y="Antal", 
+                                x="Tid på dagen", 
+                                color = "") + theme_ipsum() + scale_color_manual(values = farver)+
+                           #scale_y_continuous(breaks = seq(0, 500, 100), limits = c(0, 500)) +
+                           #scale_x_continuous(breaks = seq(8, 14, 1), limits = c(8, 14)) +
+                           theme_ipsum(base_size = base_size_, plot_title_size = plot_title_size_, 
+                subtitle_size = subtitle_size_, strip_text_size = strip_text_size_, 
+                caption_size = caption_size_, axis_title_size = axis_title_size_) +
+                           theme(plot.caption = element_text(hjust = 0))))  %>% 
+    select(plot) 
+
+
+for (i in 1:max_skan) {
+    print(ts_version$plot[[i]])
+}
+
+for (i in 1:max_skan){
+    save_file_name <- paste0(save_fig_loc, machines_to_select, "/", affix_save_name, "_antal_skanninger_i_aabningstid_fordeltprioritet_", i, "_plot.png")
+    ggsave(save_file_name, plot = ts_version$plot[[i]], width = 30, height = 20, units = "cm")
+}
+
+
+```
+
+
+## Fordelt scanner over tid
+
+
+```{r}
+
+
+## Fordelt skanninger på tid
+## FIX
+
+tid_plots <- alle_r_en_r %>% 
+    filter(Procedure_priority!="-1") %>%   
+    count(hour, Procedure_priority) %>% 
+    spread(Procedure_priority, n) %>% 
+    replace(is.na(.), 0)   
+tid_plots[25,1] <-NA
+
+subtitle_text <- paste0("Fordelt på tid i ", paste0(c(years_to_select), collapse = "_"))
+
+if (machines_to_select != "gennemlyser") {
+tid_plots <- tid_plots %>% 
+    gather(Haste, Fremskyndet, `Kræftpakke`, Rutine, key="Procedure_priority", value="n") %>% 
+    group_by(Procedure_priority) %>% 
+    nest() %>% 
+    mutate(plots = map2(data, Procedure_priority,  function(.x, .y){
+        .x %>%   ggplot(aes(x=.x$hour, y=.x$n)) +
+            geom_line() +
+            # scale_x_continuous(breaks = seq(0, 23, 1)) +
+            labs(title = paste0("Antal scanninger for ", .y, ""),
+                 subtitle = subtitle_text,
+                 y= "Antal", 
+                 x="Tid") + theme_ipsum(base_size = base_size_, plot_title_size = plot_title_size_, 
+                subtitle_size = subtitle_size_, strip_text_size = strip_text_size_, 
+                caption_size = caption_size_, axis_title_size = axis_title_size_) + scale_color_manual(values = farver) +
+            theme(legend.position="none")
+    } ))
+} else {
+    tid_plots <- tid_plots %>% 
+        gather(Haste, Fremskyndet, Rutine, key="Procedure_priority", value="n") %>% 
+        group_by(Procedure_priority) %>% 
+        nest() %>% 
+        mutate(plots = map2(data, Procedure_priority,  function(.x, .y){
+            .x %>%   ggplot(aes(x=.x$hour, y=.x$n)) +
+                geom_line() +
+                # scale_x_continuous(breaks = seq(0, 23, 1)) +
+                labs(title = paste0("Antal scanninger for ", .y, ""),
+                     subtitle = subtitle_text,
+                     y= "Antal", 
+                     x="Tid") + theme_ipsum(base_size = base_size_, plot_title_size = plot_title_size_, 
+                subtitle_size = subtitle_size_, strip_text_size = strip_text_size_, 
+                caption_size = caption_size_, axis_title_size = axis_title_size_) + scale_color_manual(values = farver) +
+                theme(legend.position="none")
+        } ))
+}
+
+for(i in 1:max_skan){
+    print(tid_plots$plots[[i]])
+}
+
+
+for (i in 1:max_skan){
+    save_file_name <- paste0(save_fig_loc, machines_to_select, "/", affix_save_name, "_antal_skanninger_fordelt_paa_tid_", i, "_plot.png")
+    ggsave(save_file_name, plot = tid_plots$plots[[i]], width = 30, height = 20, units = "cm")
+}
+
+
+```
+
+
+## SKS koder
+
+```{r}
+nWanted <- 15
+foo <-  head(count(alle_r_en_r_aab, SKS, sort=TRUE), nWanted)$SKS  
+#top 15
+p <- alle_r_en_r_aab %>% 
+    count(SKS, sort=TRUE) %>%  
+    mutate(andel=n/sum(n)*100) %>% 
+    filter(SKS %in% foo) %>% 
+    ggplot(aes(x=fct_reorder(SKS, n),  y=andel)) +
+    geom_bar(stat="identity") +
+    coord_flip() + theme_ipsum(base_size = base_size_, plot_title_size = plot_title_size_, 
+                subtitle_size = subtitle_size_, strip_text_size = strip_text_size_, 
+                caption_size = caption_size_, axis_title_size = axis_title_size_) + scale_color_manual(values = "black") +
+    scale_y_continuous(breaks=seq(0, 60, 1)) +
+    labs(x="SKS",
+         y="%",
+         title= paste0("Top", " ", nWanted, " ", "SKS koder i Åbningstiden i ", paste0(c(years_to_select), collapse = "_") )) 
+
+p
+
+save_file_name <- paste0(save_fig_loc, machines_to_select, "/", affix_save_name, "_top_15_sks_koder.png")
+ggsave(save_file_name, plot = p, width = 30, height = 20, units = "cm")
+
+```
+
+
+
+```{r}
+p <- alle_r_en_r %>% 
+    mutate(lump= fct_lump(SKS, length(foo) -1, other_level= "Alle andre kombinationer")) %>% 
+    count(lump, sort=TRUE) %>%   
+    mutate(andel=n/sum(n)*100) %>% 
+    ggplot(aes(x=fct_reorder(lump, n),  y=andel)) +
+    geom_bar(stat="identity") + theme_ipsum(base_size = base_size_, plot_title_size = plot_title_size_, 
+                subtitle_size = subtitle_size_, strip_text_size = strip_text_size_, 
+                caption_size = caption_size_, axis_title_size = axis_title_size_) + scale_color_manual(values = farver) +
+    coord_flip() +
+    labs(x="SKS",
+         y="%",
+         title= paste0("SKS grupper i ", paste0(c(years_to_select), collapse = "_")) )
+
+p
+
+save_file_name <- paste0(save_fig_loc, machines_to_select, "/", affix_save_name, "_top_15_sks_koder_m_andre_kob.png")
+ggsave(save_file_name, plot = p, width = 30, height = 20, units = "cm")
+```
+
+## alle sks 
+
+```{r}
+aab_SKS <- alle_r_en_r_aab %>% 
+    count(SKS, sort=TRUE) 
+alle_SKS <- alle_r_en_r %>%  
+    count(SKS, sort=TRUE) 
+# lang tabel: 
+combined_view <- full_join(aab_SKS, alle_SKS, by="SKS")
+
+
+colnames(combined_view) <- c("SKS", "Antal i åbningstid", paste0(c(years_to_select), collapse = "_"))
+
+dir.create(file.path(paste0(here(), "/output_data/", machines_to_select)))
+
+
+save_file_name <- paste0(here(), "/output_data/", machines_to_select, "/", affix_save_name, "_oversig_sks_koder_aabning_ialt.csv")
+write.csv(as.matrix(combined_view), save_file_name, row.names = FALSE)
+```
+
+
+
+##
+
+```{r}
+
+alle_r_en_r_aab %>% 
+    filter(!Procedure_priority %in% c("-1", "Prioritet mangler", "DO NOT REMOVE")) %>% 
+    count(date, Procedure_priority) %>% 
+    spread(Procedure_priority, n)
+
+
+tmp <- alle_r_en_r_aab %>% 
+    filter(!Procedure_priority %in% c("-1", "Prioritet mangler")) %>% 
+    group_by(Procedure_priority) %>% 
+    nest() %>%  
+    mutate(antal_pr_dag = map(.x= data,  ~.x %>% count(date))) %>%
+    mutate(plot = map2(.x= antal_pr_dag, .y = Procedure_priority, 
+                       ~ .x))
+
+max <- -1
+for (i in 1:length(tmp$antal_pr_dag)) {
+    tmp_m <- max(tmp$antal_pr_dag[[i]]$n)
+    if (tmp_m > max) {
+        max <- tmp_m
+    }
+}
+
+variation_i_antal_pr_dag <- alle_r_en_r_aab %>% 
+    filter(!Procedure_priority %in% c("-1", "Prioritet mangler")) %>% 
+    group_by(Procedure_priority) %>% 
+    nest() %>%  
+    mutate(antal_pr_dag = map(.x= data,  ~.x %>% count(date))) %>%   
+    mutate(plot = map2(.x= antal_pr_dag, .y = Procedure_priority, 
+                       ~ .x %>%  
+                           ggplot() +
+                           geom_point(aes(x=date, y=n), color="blue") +
+                           labs(title=paste0(.y, ": Antal pr. dag i åbningstiden", sep=""),
+                                x="",
+                                y="") + scale_color_manual(values = farver)  +
+                           theme_ipsum() +
+                           scale_y_continuous(limits=c(0, max), breaks= seq(0, max, 5)) 
+    )) 
+
+
+for (i in 1:max_skan){
+    print(variation_i_antal_pr_dag$plot[[i]])
+}  
+
+for (i in 1:max_skan){
+    save_file_name <- paste0(save_fig_loc, machines_to_select, "/", affix_save_name, "_variation_i_antal_", i, "_plot.png")
+    ggsave(save_file_name, plot = variation_i_antal_pr_dag$plot[[i]], width = 30, height = 20, units = "cm")
+}
+```
+
+
+
+```{r}
+week_nums_vec <- c(2:12, 15:16, 20, 22:51)
+
+
+
+tmp <- alle_r_en_r_aab %>% 
+    filter(!Procedure_priority %in% c("-1", "Prioritet mangler")) %>% 
+    filter(week_num %in% week_nums_vec) %>% 
+    group_by(Procedure_priority) %>% 
+    nest() %>%  
+    mutate(antal_pr_uge = purrr::map(.x= data,  ~.x %>% count(week_num))) %>%   
+    mutate(plot = map2(.x= antal_pr_uge, .y = Procedure_priority, 
+                       ~ .x))
+
+max <- -1
+for (i in 1:length(tmp$antal_pr_uge)) {
+    tmp_m <- max(tmp$antal_pr_uge[[i]]$n)
+    if (tmp_m > max) {
+        max <- tmp_m
+    }
+}
+
+
+
+variation_i_antal_week <- alle_r_en_r_aab %>% 
+    filter(!Procedure_priority %in% c("-1", "Prioritet mangler")) %>% 
+    filter(week_num %in% week_nums_vec) %>% 
+    group_by(Procedure_priority) %>% 
+    nest() %>%  
+    mutate(antal_pr_uge = purrr::map(.x= data,  ~.x %>% count(week_num))) %>%   
+    mutate(plot = map2(.x= antal_pr_uge, .y = Procedure_priority, 
+                       ~ .x %>%  
+                           ggplot() +
+                           theme_ipsum() + scale_color_manual(values = farver) + 
+                           geom_point(aes(x=week_num, y=n), color="blue") +
+                           labs(title=paste0(.y, ": Antal pr. uge i åbningstiden", sep=""),
+                                x="",
+                                y="", 
+                                caption= "Bruger 44 uge hvor alle uge er med for at undgå bias.") +
+                           scale_y_continuous(limits=c(0, max), breaks= seq(0, max, 30)) +
+                           scale_x_continuous(breaks= seq(0, 51, 2 )) 
+    ))
+
+for (i in 1:max_skan){
+    print(variation_i_antal_week$plot[[i]])
+} 
+
+for (i in 1:max_skan){
+    save_file_name <- paste0(save_fig_loc, machines_to_select, "/", affix_save_name, "_variation_i_antal_uge_", i, "_plot.png")
+    ggsave(save_file_name, plot = variation_i_antal_week$plot[[i]], width = 30, height = 20, units = "cm")
+}
+```
+
+
+```{r}
+tmp <- 
+    alle_r_en_r_aab %>% 
+    filter(!Procedure_priority %in% c("-1", "Prioritet mangler")) %>% 
+    filter(week_num %in% week_nums_vec) %>% 
+    count(week_num, Procedure_priority)
+
+p <- alle_r_en_r_aab %>% 
+    filter(!Procedure_priority %in% c("-1", "Prioritet mangler")) %>% 
+    filter(week_num %in% week_nums_vec) %>% 
+    count(week_num, Procedure_priority) %>% 
+    ggplot(aes(Procedure_priority, n, fill=Procedure_priority)) +
+    stat_boxplot(geom ='errorbar') +
+    geom_boxplot() +
+    #geom_jitter(alpha=0.2) +
+    coord_flip() +
+    labs(x="", y="Antal", title="Antal scanninger pr. uge i åbningstiden") +
+    scale_y_continuous(breaks = seq(0, roundUpNice(max(tmp$n)), roundUpNice(max(tmp$n))/10)) +
+    theme_ipsum() + scale_color_manual(values = farver) +
+    theme(legend.position = "none")
+
+p
+
+save_file_name <- paste0(save_fig_loc, machines_to_select, "/", affix_save_name, "_box_plot_anden_del.png")
+ggsave(save_file_name, plot = p, width = 30, height = 20, units = "cm")
+```
+
+
+
+
+```{r}
+print("DONE")
+```
