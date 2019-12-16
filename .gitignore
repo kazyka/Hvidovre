@@ -38,7 +38,7 @@ vignettes/*.pdf
 # R Environment Variables
 .Renviron
 
-# Data folder
+# Folders to ignore
 
 /data/
 /data

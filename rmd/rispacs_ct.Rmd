@@ -26,7 +26,7 @@ library(vroom)
 machines_to_select_list <- c("CT", "MR", "gennemlyser", "kaebeskanner", "RTG", 
                              "XRU", "UL", "PET")
 
-kk <- 5
+kk <- 1
 ```
 
 
@@ -172,6 +172,20 @@ read_file_loc <- paste0(save_processed_loc, machines_to_select, "/aktivitet.rds"
 ct_out <- readRDS(read_file_loc)
 print(paste0("File read: ", read_file_loc))
 ```
+
+
+```{r}
+tmp <- ct_out[, c("SKS", "year")]
+tmp2 <- ddply(tmp, .(tmp$SKS, tmp$year), nrow)
+colnames(tmp2) <- c("SKS", "year", "freq")
+tmp3 <- tmp2[, c("year", "freq")] %>%
+    group_by(year)  %>%
+    summarize_all(sum)
+
+save_file_name <- paste0(here(), "/output_data/", machines_to_select, "/", affix_save_name, "_oversigt_sks_total_koder.csv")
+write.csv(as.matrix(tmp3), save_file_name, row.names = FALSE)
+```
+
 
 
 ```{r}

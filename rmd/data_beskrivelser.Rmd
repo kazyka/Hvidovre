@@ -1,0 +1,99 @@
+---
+title: "data beskrivelser"
+author: "Mirza Hasanbasic"
+date: "16/12/2019"
+output:
+  html_document:
+    toc: true
+    theme: united
+knit: (function(inputFile, encoding) { 
+      out_dir <- '../docs';
+      rmarkdown::render(inputFile,
+                        encoding=encoding, 
+                        output_file=file.path(dirname(inputFile), out_dir, 'data_beskrivelser.html')) })
+---
+
+
+# raw
+
+All raw data is located in this folder.
+
+## FBE
+
+This is where the FBE analysis datasets are located.
+
+### hr
+
+The HR dataset for Radiografer and Radiologer.
+
+| Name | description |
+|------|-------------|
+| HV_Billeddiagnostik | HR dataset for 2018 |
+| HV_Billeddiagnostik_2019 | HR dataset for 2019 |
+
+### rispacs
+
+This folder has a lot of different datasets.
+
+| Name | description |
+|------|-------------|
+| Aflyste_CT 2018-2019 | Contains the cancelled operations with desc. and for all scanning (MR, PET, CT, ...)|
+| Aflyste_CT 2018 | Contains the canclled operations only for CT and for the year 2018|
+| Appointments på QP patienter 2016 til dd | Contains information for research purpose. (MR, PET, CT, ...)|
+| Den første Kopi af Bilag 2 tilbudsliste-TMC-priser | ... |
+| helligdag18.rda | Public holiday dates for 2018 |
+| Kopi af Kopi af Bilag 2 tilbudsliste-TMC-priser| ... |
+| Kopi af Kopi af Kopi af Antal_scanninger_aabning_vs_hele | ... |
+| Kopi af Kopi af Kopi af Bilag 2 tilbudsliste-TMC-priser ny | ... |
+| Kopi af Kopi af Kopi af Kopi af Bilag 2 tilbudsliste-TMC-priser ny (2)-clp | ... |
+| Kopi af Kopi af Kopi af Kopi af Kopi af Bilag 2 tilbudsliste-TMC-priser ny (2)-clp | ... |
+| ris_data_beskrivende_doctor | Contains information about which doctor does the descriptive work about the scanned pictures |
+| skannertype | Informations about Source of the scanner and their scanner name |
+| skannertype_new | Informations about Source of the scanner and their scanner name (updated) |
+| sks_navne | Informations about sks codes and description |
+
+#### R
+
+Functions that are used for the rispacs part of the project.
+
+### vagtplaner
+
+Schedules for Radiografer and Radiologer
+
+| Name | description |
+|------|-------------|
+| Basisskemaugeplan2018_Radiologer | Schedules for Radiologer 2018 |
+| Basisskemaugeplan2019_Radiologer | Schedules for Radiologer 2019 |
+| NavneListe_Radiologer | Name overview for radiologer with initiales, HR name and duty roaster names. Aswell a value with indication whether they are a doctor or not |
+
+## operations_analyser
+
+### hr
+
+# processed
+
+## FBE
+
+### rispacs
+
+| Name | description |
+|------|-------------|
+| pacs_data_afgr.rds | Pacs data that is from the data base. Find more information in the file `rispacs_beskrivende_sks_koder` |
+| ris_data_afgr.rds | Ris data that is from the data base. Find more information in the file `rispacs_beskrivende_sks_koder` |
+| sks_beskrivelser.rds | SKS data that is from the data base. Find more information in the file `rispacs_beskrivende_sks_koder` |
+
+Beside the mentioned files in the table there also exists some folders.
+
+These folders are:
+
+* CT
+* gennemlyser
+* kaebeskanner
+* MR
+* PET
+* RTF
+* UTG
+* UL
+* XRU
+
+and contains only one file with the activity for each type.
