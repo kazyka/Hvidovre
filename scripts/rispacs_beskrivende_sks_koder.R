@@ -76,7 +76,7 @@ years_to_select <- years_to_select_list[3:4]
 machines_to_select_list <- c("CT", "MR", "gennemlyser", "kaebeskanner", "RTG", 
                              "XRU", "UL")
 
-kk <- 1
+kk <- 7
 machines_to_select <- machines_to_select_list[kk]
 
 if (machines_to_select == "CT") {
@@ -177,4 +177,111 @@ out$quarters <- zoo::as.yearqtr(out$date, format = "%Y-%m-%d")
 
 out <- out[which(out$quarters %in% dput(sort(unique(out$quarters))[1:(length(unique(out$quarters)) - 1)]) ), ]
 
+alle_r_en_r <- out %>% 
+    mutate(Source= fct_relevel(Source, unique(out$Source)[order(match(unique(out$Source), machines_selected))]),
+           Procedure_priority = fct_relevel(Procedure_priority, lev_pri)) 
+
+
+# SKS oversigt
+
+sks_df <- count(alle_r_en_r, SKS_m_mod, sort=TRUE)
+
+
+suppressWarnings(
+    df_tmp <- data.frame(sks_df,do.call(rbind,str_split(sks_df$SKS_m_mod,"/")))
+)
+
+
+tt_pre_colnames <- dput(colnames(df_tmp))
+
+no_of_true <- sum(str_detect(tt_pre_colnames, "X"))
+
+df <- df_tmp[, str_detect(tt_pre_colnames, "X")]
+
+
+#kommenter denne del
+for (row in 1:nrow(df)) {
+    vec = df %>% slice(row) %>% unlist() %>% unname()
+    #check for duplicates
+    if(length(unique(vec)) != length(df)) {
+        positions <- which(duplicated(vec) %in% c("TRUE"))
+        #iterate through positions
+        for(i in 1:length(positions)) {
+            possible_new_values <- c(NA)
+            df[row,positions[i]]  <- sample(possible_new_values
+                                            [ ! possible_new_values %in% unique(vec)],1)
+        }
+    }
+}
+
+
+
+# kommenter her
+df_final <- cbind(df_tmp[, c("SKS_m_mod")], df)
+
+colnames(df_final) <- c("Koder_samlet", paste0("SKS", 1:no_of_true))
+
+tt_colnames <- dput(colnames(df_final))
+names_of_col <- colnames(df_final[, str_detect(tt_colnames, "SKS")])
+
+# tmp_df <- as.data.frame(splitstackshape::cSplit(df_final[, names_of_col], names(df_final[, names_of_col]), 
+#                                   sep = "_"))
+
+tmp_df <- as.data.frame(splitstackshape::cSplit(df_final, names(df_final[, names_of_col]), 
+                                                sep = "_"))
+
+tt_colnames <- dput(colnames(tmp_df))
+names_of_col_sks <- colnames(tmp_df[, str_detect(tt_colnames, "_1")])
+names_of_col_sks_til <- colnames(tmp_df[, str_detect(tt_colnames, "_2")])
+
+names_of_col_sks <- names_of_col
+names_of_col_sks_til <- paste0("SKS", 1:no_of_true, "_til")
+new_names <- c(rbind(names_of_col_sks, names_of_col_sks_til))
+
+colnames(tmp_df) <- c(colnames(tmp_df)[1], new_names)
+
+
+# next part
+df_final_til <- tmp_df
+
+
+tt_colnames <- dput(colnames(df_final_til))
+names_of_col <- colnames(df_final_til[, str_detect(tt_colnames, "SKS")])
+
+
+df_final_til$row_id <- 1:nrow(df_final_til)
+
+df_overview <- df_final_til
+
+
+sks_navne_oversigt <- sks_data[, c("SKS_Kode", "SKS_Txt")]
+
+for (i in 1:length(names_of_col)) {
+    to_append <- merge(x = df_final_til, y = sks_navne_oversigt, by.x = names_of_col[i], by.y = "SKS_Kode", all.x = TRUE)
+    to_append <- to_append[, (ncol(to_append)-1):(ncol(to_append))]
+    df_overview <- merge(x = df_overview, y = to_append, by="row_id", all = TRUE)
+    #colnames(df_overview) <- c("row_id", "Koder_samlet", paste0("SKS", 1:no_of_true), paste0("Tekst", 1:i))
+    df_overview <- df_overview[ , !(names(df_overview) %in% names_of_col[i])]
+    colnames(df_overview)[length(df_overview)] <- names_of_col[i]
+}
+
+
+df_overview <- df_overview[!duplicated(df_overview$row_id),]
+
+
+df_overview <- df_overview[ , order(names(df_overview))]
+
+df_overview <- df_overview[,colSums(is.na(df_overview))<nrow(df_overview)]
+
+df_overview <- df_overview[ , !(names(df_overview) %in% "row_id")]
+
+df_overview <- df_overview[order(rowSums(is.na(df_overview))), ]
+
+# df_overview[] <- t(apply(df_overview, 1, function(x) c(x[!is.na(x)], x[is.na(x)])))
+
+df_overview$Tid_i_min <- 0
+
+
+save_file_name <- paste0(save_data_loc, machines_to_select, "/", affix_save_name, "_sks_oversigt_hele_doegn.csv")
+write.csv(as.matrix(df_overview), save_file_name, row.names = TRUE)
 

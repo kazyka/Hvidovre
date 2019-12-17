@@ -28,6 +28,8 @@ The purpose of this file is to extract all of the `sks`-codes that are used by a
 
 # Comments
 
+
+
 # Data Used
 
 The data used can be found in `data/processed/FBE/rispacs` where the following files are used:
@@ -36,7 +38,11 @@ The data used can be found in `data/processed/FBE/rispacs` where the following f
 * `ris_data_afgr.rds`
 * `sks_beskrivelser.rds`
 
+You can use `readRDS()` to read these files.
+
 The raw data can be found in `Server = "RGHPRODAPP007\\RGHPRODAPP007"` for the `ris` and `pacs`.  While for the `sks_beskrivelser` this data is located in `Server = "RGHPRODAPP006\\RGHPRODAPP006"`.
+
+The `r` code can be found below.
 
 ```
 Analyse <- dbConnect(odbc::odbc(),

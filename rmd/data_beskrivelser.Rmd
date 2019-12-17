@@ -96,4 +96,4 @@ These folders are:
 * UL
 * XRU
 
-and contains only one file with the activity for each type.
+and contains only one `rds` file with the activity for each type.
