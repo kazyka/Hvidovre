@@ -13,6 +13,7 @@ library(vroom)
 
 
 
+
 machines_to_select_list <- c("CT", "MR", "gennemlyser", "kaebeskanner", "RTG", 
                              "XRU", "UL", "PET")
 
@@ -116,6 +117,8 @@ farver <-
     )
 
 
+for (kk in 1:7) {
+
 machines_to_select <- machines_to_select_list[kk]
 years_to_select <- c("2016", "2017", "2018", "2019")
 
@@ -162,15 +165,25 @@ read_file_loc <- paste0(save_processed_loc, machines_to_select, "/aktivitet.rds"
 ct_out <- readRDS(read_file_loc)
 print(paste0("File read: ", read_file_loc))
 
+alle_r_en_r <- ct_out
+
+til_sks_df <- alle_r_en_r[ , c("year", "SKS")]
+s <- strsplit(til_sks_df$SKS, split = "/")
+tmp <- data.frame(year = rep(til_sks_df$year, sapply(s, length)), SKS = unlist(s))
 
 
 
-tmp <- ct_out[, c("SKS", "year")]
 tmp2 <- rename(count(tmp, year, SKS), Freq = n)
+
+
+
 
 tmp3 <- tmp2[, c("year", "Freq")] %>%
     group_by(year)  %>%
     summarize_all(sum)
 
+
 save_file_name <- paste0(here(), "/output_data/", machines_to_select, "/", affix_save_name, "_oversigt_sks_total_koder.csv")
 write.csv(as.matrix(tmp3), save_file_name, row.names = FALSE)
+
+}

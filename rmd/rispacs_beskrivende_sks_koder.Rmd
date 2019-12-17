@@ -24,7 +24,7 @@ The project file is currently `Hvidovre-new`. You should open the `R Project` ic
 
 # Purpose
 
-The purpose of this file is to extract all of the `sks`-codes that are used by a machine.
+The purpose of this file is to extract all of the `sks`-codes that are used by a machine and give the a meaningfull text.
 
 # Comments
 
@@ -79,8 +79,10 @@ sks_data <- tbl(Analyse_sks, in_schema("DATA", "V_SKS_KODER")) %>%
 dbDisconnect(Analyse_sks) 
 ```
 
-
-
 # Contents
 
 # Updates
+
+
+
+
