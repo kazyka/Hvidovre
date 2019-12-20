@@ -1,3 +1,10 @@
+# Description of this file:
+# Using pacs, ris, sks and scanning_type datasets
+# The purpose of this file is to describe the sks and sks modifier
+# for each subspeciality
+#
+#
+
 
 library(dplyr)
 library(dbplyr)
@@ -131,6 +138,15 @@ one_row <- left_join(a, b, by = "Accession_number2") %>%
            Source = if_else(is.na(Source), "Scanner ID missing", Source))
 
 # Split up the sks and mod.
+# originally there exists two columns
+# one with the SKS value and one with the SKS modifier
+# In function dog_spread_SKS, the sks codes with the modifier are merged
+# if they are mergable out of the criteria.
+# The idea here is to split it up, so there is a column with SKS, one with the
+# modifier and the last with sks and modifier, e.g.
+# SKS: value1/value2
+# SKS-w-mod: value1_NA/value2_UXM
+# SKS-mod: NA/UXM
 one_row$SKS_m_mod <- one_row$SKS
 one_row$SKS <- ""
 one_row$SKS_mod <- ""
@@ -186,7 +202,8 @@ alle_r_en_r <- out %>%
 
 sks_df <- count(alle_r_en_r, SKS_m_mod, sort=TRUE)
 
-
+# Getting a warning. 
+# Ignore this for now.
 suppressWarnings(
     df_tmp <- data.frame(sks_df,do.call(rbind,str_split(sks_df$SKS_m_mod,"/")))
 )

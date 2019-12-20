@@ -2,8 +2,8 @@
 # Dataset that is needed here is the activity.rds file
 # that is located in each subspeciality in the processed folder
 # for FBE.
-# Here the output is how many sks codes were used for each year, from the year 
-# 2016
+# Here the output is a timeseries plot of scannings and sks codes used for each 
+# day
 
 
 
@@ -25,7 +25,7 @@ library(vroom)
 machines_to_select_list <- c("CT", "MR", "gennemlyser", "kaebeskanner", "RTG", 
                              "XRU", "UL", "PET")
 
-kk <- 7
+kk <- 1
 
 
 
@@ -124,9 +124,8 @@ farver <-
         rgb(150, 140, 140, m = 255)
     )
 
-
-for (kk in 1:7) {
-
+for (kk in 1:length(machines_to_select_list)) {
+    
 machines_to_select <- machines_to_select_list[kk]
 years_to_select <- c("2016", "2017", "2018", "2019")
 
@@ -175,23 +174,126 @@ print(paste0("File read: ", read_file_loc))
 
 alle_r_en_r <- ct_out
 
-til_sks_df <- alle_r_en_r[ , c("year", "SKS")]
+
+alle_r_en_r_aab <- alle_r_en_r %>% 
+    dog_aabningstid()
+
+n_hverdage <- alle_r_en_r_aab %>% 
+    distinct(date) %>% 
+    nrow()
+
+n_aabningsdage <- alle_r_en_r_aab %>%
+    count(date, Source) %>%
+    count(Source) %>% 
+    rename(Antal_aabningsdage= n) %>% 
+    mutate(Antal_dage_lukket =  n_hverdage - Antal_aabningsdage) %>% 
+    filter(Source != "Ingen ID") 
+
+antal_scan <- alle_r_en_r_aab %>% 
+    group_by(Source) %>%
+    summarise(Antal_scanninger=n()) 
+
+aab_acc_num <- alle_r_en_r_aab$Accession_number2
+
+lukket_df <- alle_r_en_r %>% 
+    filter(!Accession_number2 %in% aab_acc_num)
+
+
+hverdage <- alle_r_en_r %>% 
+    filter(!weekday %in% c(1,7)) %>% 
+    filter(!date %in% helligdag)
+
+data_nummer <- alle_r_en_r %>% 
+    count(Source)
+
+# Oversigt på dagplan
+
+oversigt_dagsniveau <- alle_r_en_r_aab %>%
+    count(date, Source) %>% 
+    spread(Source, n)  %>%
+    #(- `Ingen ID`) %>%
+    replace(is.na(.), 0) 
+
+save_file_name <- paste0(save_data_loc, machines_to_select, "/", affix_save_name, "_oversigt_dagplan_aabningstid.csv")
+write.csv(as.matrix(oversigt_dagsniveau), save_file_name, row.names = TRUE)
+
+
+til_sks_df <- alle_r_en_r_aab[ , c("date", "SKS")]
 s <- strsplit(til_sks_df$SKS, split = "/")
-tmp <- data.frame(year = rep(til_sks_df$year, sapply(s, length)), SKS = unlist(s))
+tmp <- data.frame(date = rep(til_sks_df$date, sapply(s, length)), SKS = unlist(s))
+
+
+sks_over_tid <- tmp %>%
+    count(date, SKS)
+sks_ag_tid <- aggregate(sks_over_tid$n, by=list(Category=sks_over_tid$date), FUN=sum)
+
+maskin_over_tid <- oversigt_dagsniveau %>%
+    mutate(sum = rowSums(.[2:ncol(oversigt_dagsniveau)]))
+
+
+oversigt_tidserie <- sks_ag_tid[, c("Category", "x")]
+colnames(oversigt_tidserie) <- c("date", "total_sks")
+oversigt_tidserie <- merge(x = oversigt_tidserie, y = maskin_over_tid[ , c("date", "sum")], all = TRUE)
+colnames(oversigt_tidserie) <- c("date", "total_sks", "total_skanninger")
+oversigt_tidserie$quarters <- zoo::as.yearqtr(oversigt_tidserie$date, format = "%Y-%m-%d")
+
+tmp_sks <- oversigt_tidserie %>%
+    group_by(quarters) %>% summarise(sum(total_sks))
+
+colnames(tmp_sks) <- c("quarters", "total_sks")
+
+# tmp_sks$ratio_sks <- 0
+#
+# for (i in 2:nrow(tmp_sks)) {
+#     tmp_sks$ratio_sks[i] <- ((tmp_sks$total_sks[i] - tmp_sks$total_sks[i-1]) / tmp_sks$total_sks[i-1])*100
+# }
 
 
 
-tmp2 <- rename(count(tmp, year, SKS), Freq = n)
+tmp_skanninger <- oversigt_tidserie %>%
+    group_by(quarters) %>% summarise(sum(total_skanninger))
+
+colnames(tmp_skanninger) <- c("quarters", "total_skanninger")
+
+# tmp_skanninger$ratio_skan <- 0
+#
+# for (i in 2:nrow(tmp_skanninger)) {
+#     tmp_skanninger$ratio_skan[i] <- ((tmp_skanninger$total_skanninger[i] - tmp_skanninger$total_skanninger[i-1]) / tmp_skanninger$total_skanninger[i-1])*100
+# }
+
+
+oversigt_kvart <- merge(x = tmp_sks, y = tmp_skanninger, by = "quarters", all = TRUE)
 
 
 
-
-tmp3 <- tmp2[, c("year", "Freq")] %>%
-    group_by(year)  %>%
-    summarize_all(sum)
+title_text <- "Udvikling over tid af SKS og Skanninger"
+sub_title_text <- paste0("For ", machines_to_select, " skanninger")
 
 
-save_file_name <- paste0(here(), "/output_data/", machines_to_select, "/", affix_save_name, "_oversigt_sks_total_koder.csv")
-write.csv(as.matrix(tmp3), save_file_name, row.names = FALSE)
+test <- oversigt_kvart %>%
+    gather(key = "variable", value = "value", -quarters)
 
+p <- oversigt_kvart %>%
+    gather(key = "variable", value = "value", -quarters) %>%
+    ggplot(aes(x = quarters, y = value, colour = variable)) +
+    zoo::scale_x_yearqtr(format="%YQ%q", n=5) +
+    theme_ipsum_rc() +
+    ylim(0, roundUpNice(max(oversigt_kvart$total_sks))) +
+    geom_line() +
+    geom_point() +
+    geom_smooth(method = "lm", se=FALSE) +
+    # geom_text(aes(label = round(value, 1)),
+    #           vjust = "outward", hjust = "inward",
+    #           show.legend = FALSE) +
+    #scale_color_manual(values = farver) +
+    labs(title=title_text,
+         subtitle = sub_title_text,
+         x="Kvartal",
+         y="Antal",
+         fill="") +
+    scale_color_manual(values = farver, name = "", labels = c("Antal Skanninger", "Antal SKS koder"))
+
+
+save_file_name <- paste0(save_fig_loc, machines_to_select, "/", affix_save_name, "_udvikling_over_tid.png")
+ggsave(save_file_name, plot = p, width = 30, height = 20, units = "cm")
 }
