@@ -42,3 +42,6 @@ vignettes/*.pdf
 
 /data/
 /data
+
+/output_data/
+/output_data
