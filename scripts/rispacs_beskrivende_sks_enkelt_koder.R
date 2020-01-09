@@ -83,7 +83,9 @@ years_to_select <- years_to_select_list[3:4]
 machines_to_select_list <- c("CT", "MR", "gennemlyser", "kaebeskanner", "RTG", 
                              "XRU", "UL")
 
-kk <- 2
+
+
+for (kk in 1:length(machines_to_select_list)) {
 machines_to_select <- machines_to_select_list[kk]
 
 if (machines_to_select == "CT") {
@@ -197,69 +199,36 @@ alle_r_en_r <- out %>%
     mutate(Source= fct_relevel(Source, unique(out$Source)[order(match(unique(out$Source), machines_selected))]),
            Procedure_priority = fct_relevel(Procedure_priority, lev_pri)) 
 
+til_sks_df <- alle_r_en_r[ , c("SKS_m_mod")]
+s <- strsplit(til_sks_df$SKS_m_mod, split = "/")
+tmp <- data.frame(SKS_m_mod = unlist(s))
+tmp$id <- 1:nrow(tmp)
+
+
+tmp <- as.data.frame(tmp[!duplicated(tmp$SKS), ])
 
 # SKS oversigt
 
-sks_df <- count(alle_r_en_r, SKS_m_mod, sort=TRUE)
+sks_df <- count(tmp, SKS_m_mod, sort=TRUE)
 
 # Getting a warning. 
 # Ignore this for now.
 suppressWarnings(
-    df_tmp <- data.frame(sks_df,do.call(rbind,str_split(sks_df$SKS_m_mod,"/")))
+    df_tmp <- data.frame(sks_df,do.call(rbind,str_split(sks_df$SKS_m_mod,"_")))
 )
 
 
-tt_pre_colnames <- dput(colnames(df_tmp))
-
-no_of_true <- sum(str_detect(tt_pre_colnames, "X"))
-
-df <- df_tmp[, str_detect(tt_pre_colnames, "X")]
+colnames(df_tmp)[1] <- c("Koder_samlet")
+colnames(df_tmp)[3:4] <- c("SKS1", "SKS1_til")
 
 
-#kommenter denne del
-for (row in 1:nrow(df)) {
-    vec = df %>% slice(row) %>% unlist() %>% unname()
-    #check for duplicates
-    if(length(unique(vec)) != length(df)) {
-        positions <- which(duplicated(vec) %in% c("TRUE"))
-        #iterate through positions
-        for(i in 1:length(positions)) {
-            possible_new_values <- c(NA)
-            df[row,positions[i]]  <- sample(possible_new_values
-                                            [ ! possible_new_values %in% unique(vec)],1)
-        }
-    }
-}
-
-
-
-# kommenter her
-df_final <- cbind(df_tmp[, c("SKS_m_mod")], df)
-
-colnames(df_final) <- c("Koder_samlet", paste0("SKS", 1:no_of_true))
-
-tt_colnames <- dput(colnames(df_final))
-names_of_col <- colnames(df_final[, str_detect(tt_colnames, "SKS")])
-
-# tmp_df <- as.data.frame(splitstackshape::cSplit(df_final[, names_of_col], names(df_final[, names_of_col]), 
-#                                   sep = "_"))
-
-tmp_df <- as.data.frame(splitstackshape::cSplit(df_final, names(df_final[, names_of_col]), 
-                                                sep = "_"))
-
-tt_colnames <- dput(colnames(tmp_df))
-names_of_col_sks <- colnames(tmp_df[, str_detect(tt_colnames, "_1")])
-names_of_col_sks_til <- colnames(tmp_df[, str_detect(tt_colnames, "_2")])
-
-names_of_col_sks <- names_of_col
-names_of_col_sks_til <- paste0("SKS", 1:no_of_true, "_til")
-new_names <- c(rbind(names_of_col_sks, names_of_col_sks_til))
-
-colnames(tmp_df) <- c(colnames(tmp_df)[1], new_names)
 
 
 # next part
-df_final_til <- tmp_df
+df_final_til <- df_tmp
+
+
+df_final_til[which(df_final_til$SKS1_til == "NA"), "SKS1_til"] <- NA
 
 
 tt_colnames <- dput(colnames(df_final_til))
@@ -296,9 +265,15 @@ df_overview <- df_overview[order(rowSums(is.na(df_overview))), ]
 
 # df_overview[] <- t(apply(df_overview, 1, function(x) c(x[!is.na(x)], x[is.na(x)])))
 
-df_overview$Tid_i_min <- 0
+df_overview$Tid_i_min_sks <- 0
+df_overview$Tid_i_min_sks_til <- 0
+
+df_overview <- df_overview[, c("Koder_samlet", "SKS1", "Tid_i_min_sks", "SKS1_til", 
+                               "Tid_i_min_sks_til")]
+
+df_overview <- df_overview[, !(names(df_overview) %in% c("n"))]
 
 
-save_file_name <- paste0(save_data_loc, machines_to_select, "/", affix_save_name, "_sks_oversigt_hele_doegn.csv")
+save_file_name <- paste0(save_data_loc, machines_to_select, "/", affix_save_name, "_sks_oversigt_hele_doegn_enkelt_koder.csv")
 write.csv(as.matrix(df_overview), save_file_name, row.names = TRUE)
-
+}

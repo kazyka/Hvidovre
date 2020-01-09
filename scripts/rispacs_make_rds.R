@@ -1,3 +1,7 @@
+# Description of this file:
+# The purpose of this file is to create a sub data file with the activity for
+# each sub speciality.
+
 
 library(dplyr)
 library(dbplyr)

@@ -7,6 +7,8 @@ output: html_document
 
 # Regler
 
+#Dette skal ind under docs for the resp. filer!!!
+
 # Vagtplan Data
 
 Vagtplan data for 2018 og 2019 kan findes `L:\LovbeskyttetMapper\BogA - Analyse\Mirza\Hvidovre\data\raw` med navnet `Basisskemaugeplan2018_Radiologer` og `Basisskemaugeplan2019_Radiologer`. Der er ydermere lavet en navneliste som kan findes i samme sti under navnet `NavneListe_Radiologer`. Her er der forsøgt at samle en liste over hvad en person evt. hedder i HR filen og i VP filen, hvor man i sidstnævnte har deres Navne samt initialer.

@@ -30,6 +30,7 @@ The HR dataset for Radiografer and Radiologer.
 |------|-------------|
 | HV_Billeddiagnostik | HR dataset for 2018 |
 | HV_Billeddiagnostik_2019 | HR dataset for 2019 |
+| HV_Billeddiagnostik_2019_old | HR dataset for noget af 2019 |
 
 ### rispacs
 
@@ -78,9 +79,9 @@ Schedules for Radiografer and Radiologer
 
 | Name | description |
 |------|-------------|
-| pacs_data_afgr.rds | Pacs data that is from the data base. Find more information in the file `rispacs_beskrivende_sks_koder` |
-| ris_data_afgr.rds | Ris data that is from the data base. Find more information in the file `rispacs_beskrivende_sks_koder` |
-| sks_beskrivelser.rds | SKS data that is from the data base. Find more information in the file `rispacs_beskrivende_sks_koder` |
+| pacs_data_afgr.rds | Pacs data that is from the data base. Find more information in the docs `rispacs_beskrivende_sks_koder` |
+| ris_data_afgr.rds | Ris data that is from the data base. Find more information in the docs `rispacs_beskrivende_sks_koder` |
+| sks_beskrivelser.rds | SKS data that is from the data base. Find more information in the docs `rispacs_beskrivende_sks_koder` |
 
 Beside the mentioned files in the table there also exists some folders.
 

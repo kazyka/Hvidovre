@@ -1,3 +1,10 @@
+# Description of this file:
+# Dataset that is needed here is the ris_data_beskrivende_doctor.csv file
+# that is located in each subspeciality in the processed folder
+# for FBE.
+# Here the output is a to tell how much each doctor does descripe the sks codes for MR
+
+
 
 library(dplyr)
 library(dbplyr)
@@ -19,9 +26,9 @@ save_data_loc <-  paste0(here(), "/output_data/")
 save_fig_loc <-  paste0(here(), "/figures/")
 
 
-pacs_data <- readRDS(paste0(processed_loc, '/pacs_data_afgr.rds')) 
-ris_data <- readRDS(paste0(processed_loc, '/ris_data_afgr.rds')) 
-sks_data <- readRDS(paste0(processed_loc, '/sks_beskrivelser.rds')) 
+# pacs_data <- readRDS(paste0(processed_loc, '/pacs_data_afgr.rds')) 
+# ris_data <- readRDS(paste0(processed_loc, '/ris_data_afgr.rds')) 
+# sks_data <- readRDS(paste0(processed_loc, '/sks_beskrivelser.rds')) 
 
 beskrivende_doctor <- read.csv2(
     paste0(data_raw_loc, "/ris_data_beskrivende_doctor.csv"),

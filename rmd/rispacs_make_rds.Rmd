@@ -1,7 +1,7 @@
 ---
-title: "rispacs_beskrivende_sks_koder"
+title: "rispacs_make_rds"
 author: "Mirza Hasanbasic"
-date: "16/12/2019"
+date: "07/01/2020"
 output:
   html_document:
     toc: true
@@ -10,13 +10,13 @@ knit: (function(inputFile, encoding) {
       out_dir <- '../docs';
       rmarkdown::render(inputFile,
                         encoding=encoding, 
-                        output_file=file.path(dirname(inputFile), out_dir, 'rispacs_beskrivende_sks_koder.html')) })
+                        output_file=file.path(dirname(inputFile), out_dir, 'rispacs_make_rds.html')) })
 ---
 
 
 # Program name
 
-The program name is `rispacs_beskrivende_sks_koder.R` which can be located in the scripts folder.
+The program name is `rispacs_make_rds.R` which can be located in the scripts folder.
 
 # Project File
 
@@ -24,7 +24,9 @@ The project file is currently `Hvidovre-new`. You should open the `R Project` ic
 
 # Purpose
 
-The purpose of this file is to extract all of the `sks`-codes that are used by a machine and give the a meaningfull text.
+The purpose of this file is to extract the information of each subspecility and put it into its own folder as an `activity.rds`.
+The output can be found in `Hvidovre-new/data/processed/FBE/rispacs` and then the folders `CT`, `gennemlyser`, 
+`MR`, `PET`, `RTG`, `UL`, and `XRU` have their own `activity.rds` file.
 
 # Comments
 
@@ -46,7 +48,7 @@ The `r` code can be found below.
 
 ```
 Analyse <- dbConnect(odbc::odbc(),
-                     Driver = "SQL server", 
+                     Driver = "SQL server",
                      Server = "RGHPRODAPP007\\RGHPRODAPP007",
                      Database = "Analyse",
                      encoding = "latin1")
@@ -80,6 +82,8 @@ dbDisconnect(Analyse_sks)
 ```
 
 # Contents
+
+A loop runs for all the machines that are available. For each machine there is a condition that tells when two `accession numbers` can merge. To merge `dog_combine_accession_numbers()` and `dog_spread_SKS()` are used. Furthermore some small additions are made to each dataframe, such as adding quarters and using the lubridate to add new columns with year, day, date, etc.
 
 # Updates
 
